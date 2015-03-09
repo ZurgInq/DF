@@ -3,7 +3,7 @@ Unit g_game;
 Interface
 
 Uses
-  Windows, g_basic, g_player, Messages, e_graphics,
+  Windows, g_basic, g_player, Messages, e_graphics, g_saveload,
   SysUtils, g_sound, MAPSTRUCT, WADEDITOR;
 
 Type
@@ -280,6 +280,26 @@ Var
     counter: Integer;
     endtext: Boolean;
   end;
+
+procedure Autosave(Map: String);
+begin
+  if (gGameSettings.GameType = GT_SINGLE) and (not gLoadGameMode) then
+    begin
+      g_AutoSave(ExtractFileName(gGameSettings.WAD)+'_'+Map);
+    end;
+end;
+
+function restartFromAutoSave(Map: String):Boolean;
+begin
+  if (gGameSettings.GameType = GT_SINGLE) and (not gLoadGameMode) then
+    begin
+      Result := g_LoadAutoSave(ExtractFileName(gGameSettings.WAD)+'_'+Map);
+    end
+  else
+    begin
+      Result := false;
+    end;
+end;
 
 function Compare(a, b: TPlayerStat): Integer;
 begin
@@ -848,7 +868,8 @@ var
   Msg: g_gui.TMessage;
   Time: Int64;
   a: Byte;
-  i, b: Integer;                                          
+  i, b: Integer;
+  map: String;
 begin
 // Пора выключать игру:
   if gExit = EXIT_QUIT then
@@ -903,12 +924,17 @@ begin
                 g_Game_ClearLoading();
                 if g_Game_IsNet and g_Game_IsServer then
                   MH_SEND_GameEvent(NET_EV_MAPSTART, NextMap);
-                  
+
+                map := NextMap;
                 if not g_Game_StartMap(NextMap, (gGameSettings.GameMode in [GM_DM, GM_TDM, GM_CTF])) then
                 begin
                   g_FatalError(Format(_lc[I_GAME_ERROR_MAP_LOAD],
                                       [ExtractFileName(gGameSettings.WAD) + ':\' + NextMap]));
-                end;
+                end
+                else
+                  begin
+                    autosave(map);
+                  end;
               end
             else // Следующей карты нет
               begin
@@ -2571,7 +2597,6 @@ procedure g_Game_SaveOptions();
 var
   config: TConfig;
   sW, sH: Integer;
-
 begin
   e_WriteLog('Writing resolution to config', MSG_NOTIFY);
   config := TConfig.CreateFile(GameDir+'\'+CONFIG_FILENAME);
@@ -2605,10 +2630,15 @@ begin
  if g_Game_IsClient then Exit;
  g_ProcessResourceStr(gMapInfo.Map, nil, nil, @Map);
 
+ if restartFromAutoSave(Map) then
+ begin
+  Exit;
+ end;
+
  gGameOn := False;
  g_Game_ClearLoading();
  g_Game_StartMap(Map, True);
- 
+
  if g_Game_IsNet then MH_SEND_GameEvent(NET_EV_MAPSTART, Map);
 end;
 
